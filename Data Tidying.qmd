@@ -10,22 +10,114 @@ editor: visual
 
 ```{r}
 library(readr)
-ASPP_Unit_File_2024 <- read_csv("ASPP_Unit_File_2024.csv")
-View(ASPP_Unit_File_2024)
+aspp <- read_csv("ASPP_Unit_File_2024.csv")
 
-happiest_states_2026 <- read_csv("happiest-states-2026.csv")
-View(happiest_states_2026)
+
+happy <- read_csv("happiest-states-2026.csv")
+
 
 library(readxl)
-sahie_2024_csv <- read_excel("sahie_2024.csv.xlsx")
-View(sahie_2024_csv)
+sahie <- read_excel("sahie_2024.csv.xlsx")
 
-table_18_spm_opm_state_by_age <- read_excel("table_18_spm_opm_state_by_age.xlsx")
-View(table_18_spm_opm_state_by_age)
+
+pov_raw <- read_excel("table_18_spm_opm_state_by_age.xlsx",
+                      skip = 4, col_names = FALSE)
+
 ```
 
 ## Making states same to join
 
 ```{r}
+library(tidyverse)
+state_lookup <- tibble(
+  state_name = c(state.name, "District of Columbia"),
+  state_abb  = c(state.abb,  "DC")
+)
+```
 
+```{r}
+happy <- happy %>% 
+  transmute(
+    state_name      = str_squish(state),
+    happiness_score = TotalHappinessScoreByState_2025
+  )
+```
+
+```{r}
+sahie <- sahie %>% 
+  filter(geocat == 40, agecat == 0, racecat == 0, sexcat == 0, iprcat == 0) %>%
+  transmute(
+    state_name       = str_squish(state_name),   
+    pct_uninsured    = as.numeric(PCTUI),
+    n_uninsured      = as.numeric(NUI),
+    n_insured        = as.numeric(NIC),
+    pop_under65      = as.numeric(NIPR)
+  )
+```
+
+```{r}
+poverty <- pov_raw %>%
+  transmute(
+    state_name = str_squish(str_remove(`...1`, "^\\.+")),
+    pov_official_u18  = as.numeric(`...4`),
+    pov_spm_u18       = as.numeric(`...8`),
+    pov_official_1864 = as.numeric(`...12`),
+    pov_spm_1864      = as.numeric(`...16`),
+    pov_official_65p  = as.numeric(`...20`),
+    pov_spm_65p       = as.numeric(`...24`)
+  ) %>%
+  filter(state_name %in% state_lookup$state_name)   
+```
+
+```{r}
+aspp <- aspp %>% 
+rename_with(~ str_remove(.x, "^\\W+")) %>%   
+  left_join(state_lookup, by = c("STATE" = "state_abb"))
+
+items_keep <- c(
+  total_members  = "RJ01",   
+  active_members = "RJ10",   
+  beneficiaries  = "RJ20",   
+  total_assets   = "RZ01"   
+)
+
+pensions <- aspp %>%
+  filter(ITEM_CODE %in% items_keep) %>%
+  mutate(weighted_value = ITEM_VALUE * FINAL_WEIGHT) %>%   
+  group_by(state_name, ITEM_CODE) %>%
+  summarise(value = sum(weighted_value, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = ITEM_CODE, values_from = value) %>%
+  rename(!!!setNames(items_keep, names(items_keep))) %>%
+  mutate(
+    pension_assets_per_member = total_assets / total_members
+  )
+```
+
+Checking states
+
+```{r}
+
+list(
+  happy_not_in_sahie = setdiff(happy$state_name, sahie$state_name),
+  sahie_not_in_happy = setdiff(sahie$state_name, happy$state_name),  # expect DC
+  happy_not_in_pov   = setdiff(happy$state_name, poverty$state_name),
+  happy_not_in_pens  = setdiff(happy$state_name, pensions$state_name)
+)
+
+```
+
+## Joining
+
+```{r}
+states <- happy %>%
+  left_join(sahie,     by = "state_name") %>%
+  left_join(poverty,   by = "state_name") %>%
+  left_join(pensions,  by = "state_name") %>%
+  left_join(state_lookup, by = "state_name") %>%
+  relocate(state_abb, .after = state_name)
+ 
+dim(states)            # expect 50 rows
+colSums(is.na(states)) # expect no missing values
+write_csv(states, "merged_state_data.csv")
+ 
 ```
