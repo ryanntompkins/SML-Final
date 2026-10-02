@@ -1,0 +1,31 @@
+---
+title: "Data Tidying"
+format: html
+editor: visual
+---
+
+# Combining data by state to create one clean data table
+
+## Loading data
+
+```{r}
+library(readr)
+ASPP_Unit_File_2024 <- read_csv("ASPP_Unit_File_2024.csv")
+View(ASPP_Unit_File_2024)
+
+happiest_states_2026 <- read_csv("happiest-states-2026.csv")
+View(happiest_states_2026)
+
+library(readxl)
+sahie_2024_csv <- read_excel("sahie_2024.csv.xlsx")
+View(sahie_2024_csv)
+
+table_18_spm_opm_state_by_age <- read_excel("table_18_spm_opm_state_by_age.xlsx")
+View(table_18_spm_opm_state_by_age)
+```
+
+## Making states same to join
+
+```{r}
+
+```
