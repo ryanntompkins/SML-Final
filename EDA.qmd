@@ -1,0 +1,106 @@
+---
+title: "EDA"
+author: "Ryann Tompkins"
+format: html
+editor: visual
+---
+
+## Loading Data
+
+```{r}
+library(readr)
+Insurance_data <- read_csv("Insurance_data.csv")
+View(Insurance_data)
+```
+
+Summary stats and looking at target
+
+```{r}
+library(tidyverse)
+df <- Insurance_data |>  select(where(~ !all(is.na(.x))))
+
+df <- df |> 
+  mutate(
+    NOW_COV  = factor(NOW_COV),
+    A_SEX    = factor(A_SEX),
+    LJCW     = factor(LJCW),
+    PRNLFSCH = factor(PRNLFSCH),
+    A_HGA    = factor(A_HGA)
+  )
+
+summary(df)
+
+target_tbl <- df |> 
+  count(NOW_COV) |> 
+  mutate(pct = round(100 * n / sum(n), 2))
+
+print(target_tbl)
+
+
+ggplot(target_tbl, aes(factor(NOW_COV), n, fill = factor(NOW_COV))) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = paste0(n, " (", pct, "%)")), vjust = -0.4) +
+  labs(title = "Target distribution", x = "NOW_COV", y = "Count")
+
+#numeric pred. by summary group
+
+df |> 
+  group_by(NOW_COV) |> 
+  summarise(
+    n = n(),
+    mean_age = mean(A_AGE), median_age = median(A_AGE),
+    mean_fothval = mean(FOTHVAL), median_fothval = median(FOTHVAL),
+    mean_under18 = mean(HUNDER18)
+  )
+
+```
+
+## Looking at which matter most
+
+```{r}
+#install.packages("randomForest")
+library(randomForest)
+
+rf <- randomForest(NOW_COV ~ ., data = df, ntree = 500, importance = TRUE)
+
+imp <- importance(rf) %>%
+  as.data.frame() %>%
+  rownames_to_column("variable") %>%
+  arrange(desc(MeanDecreaseGini))
+print(imp)
+
+ggplot(imp, aes(reorder(variable, MeanDecreaseGini), MeanDecreaseGini)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Variable importance (random forest)", x = NULL,
+       y = "Mean decrease in Gini")
+
+top_vars <- head(imp$variable, 3)
+print(top_vars)
+
+for (v in top_vars) {
+  cat("\n---", v, "---\n")
+  
+  if (is.numeric(df[[v]])) {
+    # numeric: summary by target + boxplot
+    print(df %>% group_by(NOW_COV) %>% summarise(
+      min = min(.data[[v]]), median = median(.data[[v]]),
+      mean = mean(.data[[v]]), max = max(.data[[v]])))
+    
+    p <- ggplot(df, aes(NOW_COV, .data[[v]], fill = NOW_COV)) +
+      geom_boxplot(show.legend = FALSE) +
+      labs(title = paste(v, "by NOW_COV"), x = "NOW_COV")
+    if (v == "FOTHVAL") p <- p + scale_y_continuous(trans = "pseudo_log")
+    print(p)
+    
+  } else {
+    # categorical: proportion table + stacked bar
+    print(round(prop.table(table(df[[v]], df$NOW_COV), margin = 1), 3))
+    
+    print(ggplot(df, aes(.data[[v]], fill = NOW_COV)) +
+            geom_bar(position = "fill") +
+            labs(title = paste("NOW_COV proportion by", v),
+                 x = v, y = "Proportion"))
+  }
+}
+```
