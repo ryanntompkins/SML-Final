@@ -1,6 +1,6 @@
 ---
 title: "EDA"
-author: "Ryann Tompkins"
+author: "Ryann Tompkins, Roberta Southwood, Meg Norton, Maddy Stone"
 format: html
 editor: visual
 ---
@@ -9,24 +9,90 @@ editor: visual
 
 ```{r}
 library(readr)
-Insurance_data <- read_csv("Insurance_data.csv")
+Insurance_data <- read_csv("InsuranceData_correctedcolumns.csv")
 View(Insurance_data)
 ```
 
 Summary stats and looking at target
 
+Dataset: CPS Annual Social and Economic (March 2026) Supplement for DC
+
+<https://data.census.gov/app/mdat/CPSASEC2026/table?cv=NOW_COV,A_SEX,LJCW,PRWKSTAT&rv=ucgid,A_HGA,PRDISFLG&vv=A_AGE,HUNDER18,FTOTVAL&wt=MARSUPWT&g=AwFm-BVBlBGWg>
+
+Column codes: <https://www2.census.gov/programs-surveys/cps/techdocs/cpsmar26.pdf>
+
 ```{r}
 library(tidyverse)
+
 df <- Insurance_data |>  select(where(~ !all(is.na(.x))))
 
+# dropping state since all are from DC 
+df <- df|> select(-STATE)
+
+# make rows into factors 
 df <- df |> 
   mutate(
     NOW_COV  = factor(NOW_COV),
     A_SEX    = factor(A_SEX),
     LJCW     = factor(LJCW),
-    PRNLFSCH = factor(PRNLFSCH),
-    A_HGA    = factor(A_HGA)
+    PRWKSTAT = factor(PRWKSTAT),
+    A_HGA    = factor(A_HGA),
+    PRDISFLG    = factor(PRDISFLG)
   )
+
+# rename columns for clarity, some are kept the same 
+df <- df |>
+  rename(
+    # NOW_COV: 1 = covered, 2 = not covered 
+    NOW_COV = NOW_COV, 
+    
+    # sex: 1 = Male, 2 = Female
+    SEX = A_SEX,
+    
+    # class of longest job 
+    # 0 = NIU, 1 = private, 2 = federal, 3 = state, 4 = local, 
+    # 5 = self employed incorporated, yes, 6 = self employed incorporated, no or farm
+    # 7 = without pay
+    LONGEST_JOB_CLASS = LJCW,
+    
+    # full or part time work 
+    # 00 = NIU, 01 = Not in labor force, 02 = FT hours (35+), usually FT
+    # 03 = PT for economic reasons, usually FT, 04 = PT for non-economic reasons, usually FT
+    # 05 = Not at work, usually FT, 06 = PT hrs, usually PT for economic reasons
+    # 07 = PT hrs, usually PT for non-economic, 08 = FT hours, usually PT for economic reasons
+    # 09 = FT hours, usually PT for non-economic reasons, 10 = Not at work, usually part-time
+    # 11 = Unemployed FT, 12 = Unemployed PT
+    FULL_PART_TIME = PRWKSTAT,
+    
+    # highest grade achieved 
+    # 0 = Children, 31 = Less than 1st grade, 32 = 1st,2nd,3rd,or 4th grade
+    # 33 = 5th or 6th grade, 34 = 7th and 8th grade, 35 = 9th grade
+    # 36 = 10th grade, 37 = 11th grade, 38 = 12th grade no diploma
+    # 39 = High school graduate - high school diploma or equivalent
+    # 40 = Some college but no degree, 41 = Associate degree in college occupation program
+    # 42 = Associate degree in college, 43 = Bachelor's degree, 44 = Master's degree, 
+    # 45 = Professional school degree, 46 = Doctorate degree
+    EDUCATION = A_HGA, 
+    
+    # disability 
+    # -1 = NIU, 1 = Yes, 2 = No
+    DISABILITY = PRDISFLG, 
+    
+    # age
+    AGE = A_AGE,
+    
+    # Number of persons in household under age 18
+    HUNDER18 = HUNDER18, 
+    
+    # Total family income 
+    TOTAL_FAM_INCOME = FTOTVAL
+  )
+
+summary(df)
+
+```
+
+```{r}
 
 summary(df)
 
@@ -39,7 +105,8 @@ print(target_tbl)
 
 ggplot(target_tbl, aes(factor(NOW_COV), n, fill = factor(NOW_COV))) +
   geom_col(show.legend = FALSE) +
-  geom_text(aes(label = paste0(n, " (", pct, "%)")), vjust = -0.4) +
+  geom_text(aes(label = paste0(n, " (", pct, "%)")), vjust = -0.4) + 
+  scale_x_discrete(labels = c("1" = "Covered", "2" = "Not Covered")) + 
   labs(title = "Target distribution", x = "NOW_COV", y = "Count")
 
 #numeric pred. by summary group
@@ -48,10 +115,21 @@ df |>
   group_by(NOW_COV) |> 
   summarise(
     n = n(),
-    mean_age = mean(A_AGE), median_age = median(A_AGE),
-    mean_fothval = mean(FOTHVAL), median_fothval = median(FOTHVAL),
+    mean_age = mean(AGE), median_age = median(AGE),
+    mean_income = mean(TOTAL_FAM_INCOME), median_income= median(TOTAL_FAM_INCOME),
     mean_under18 = mean(HUNDER18)
   )
+```
+
+```{r}
+
+# scatter plot of age vs income 
+
+ggplot(df, aes(x = AGE, y = TOTAL_FAM_INCOME, color = NOW_COV)) + geom_point() +
+  labs(title = "Age vs Total Income Colored by Coverage", 
+       x = "Age", y = "Total Family Income") + 
+  scale_color_manual(name = "Insurance Coverage", values = c("1" = "coral1", "2" = "cyan3"), labels = c("1" = "Covered", "2" = "Not Covered")) + 
+  scale_size_manual(values = c("1" = 1.5, "2" = 6))
 
 ```
 
@@ -72,6 +150,7 @@ print(imp)
 ggplot(imp, aes(reorder(variable, MeanDecreaseGini), MeanDecreaseGini)) +
   geom_col(fill = "steelblue") +
   coord_flip() +
+  scale_x_discrete(labels = c("1" = "Covered", "2" = "Not Covered")) + 
   labs(title = "Variable importance (random forest)", x = NULL,
        y = "Mean decrease in Gini")
 
@@ -89,6 +168,7 @@ for (v in top_vars) {
     
     p <- ggplot(df, aes(NOW_COV, .data[[v]], fill = NOW_COV)) +
       geom_boxplot(show.legend = FALSE) +
+      scale_x_discrete(labels = c("1" = "Covered", "2" = "Not Covered")) + 
       labs(title = paste(v, "by NOW_COV"), x = "NOW_COV")
     if (v == "FOTHVAL") p <- p + scale_y_continuous(trans = "pseudo_log")
     print(p)
@@ -100,7 +180,7 @@ for (v in top_vars) {
     print(ggplot(df, aes(.data[[v]], fill = NOW_COV)) +
             geom_bar(position = "fill") +
             labs(title = paste("NOW_COV proportion by", v),
-                 x = v, y = "Proportion"))
-  }
+                 subtitle = "1 = covered, 2 = not covered", x = v, y = "Proportion"))
+    }
 }
 ```
