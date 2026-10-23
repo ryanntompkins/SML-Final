@@ -88,15 +88,34 @@ df <- df |>
     TOTAL_FAM_INCOME = FTOTVAL
   )
 
+
 summary(df)
 
 ```
 
 ```{r}
+# split into training and testing 
+set.seed(123)
 
-summary(df)
+# want to use 80-20 split 
+training_pct <- 0.8
 
-target_tbl <- df |> 
+# split the data 
+Z <- sample(nrow(df), floor(training_pct * nrow(df))) 
+df_training <- df[Z, ]
+df_testing  <- df[-Z, ]
+
+# view split 
+nrow(df_training)
+nrow(df_testing)
+
+```
+
+```{r}
+
+summary(df_training)
+
+target_tbl <- df_training |> 
   count(NOW_COV) |> 
   mutate(pct = round(100 * n / sum(n), 2))
 
@@ -111,7 +130,7 @@ ggplot(target_tbl, aes(factor(NOW_COV), n, fill = factor(NOW_COV))) +
 
 #numeric pred. by summary group
 
-df |> 
+df_training |> 
   group_by(NOW_COV) |> 
   summarise(
     n = n(),
@@ -125,7 +144,7 @@ df |>
 
 # scatter plot of age vs income 
 
-ggplot(df, aes(x = AGE, y = TOTAL_FAM_INCOME, color = NOW_COV)) + geom_point() +
+ggplot(df_training, aes(x = AGE, y = TOTAL_FAM_INCOME, color = NOW_COV)) + geom_point() +
   labs(title = "Age vs Total Income Colored by Coverage", 
        x = "Age", y = "Total Family Income") + 
   scale_color_manual(name = "Insurance Coverage", values = c("1" = "coral1", "2" = "cyan3"), labels = c("1" = "Covered", "2" = "Not Covered")) + 
@@ -139,7 +158,7 @@ ggplot(df, aes(x = AGE, y = TOTAL_FAM_INCOME, color = NOW_COV)) + geom_point() +
 #install.packages("randomForest")
 library(randomForest)
 
-rf <- randomForest(NOW_COV ~ ., data = df, ntree = 500, importance = TRUE)
+rf <- randomForest(NOW_COV ~ ., data = df_training, ntree = 500, importance = TRUE)
 
 imp <- importance(rf) %>%
   as.data.frame() %>%
@@ -160,13 +179,13 @@ print(top_vars)
 for (v in top_vars) {
   cat("\n---", v, "---\n")
   
-  if (is.numeric(df[[v]])) {
+  if (is.numeric(df_training[[v]])) {
     # numeric: summary by target + boxplot
-    print(df %>% group_by(NOW_COV) %>% summarise(
+    print(df_training %>% group_by(NOW_COV) %>% summarise(
       min = min(.data[[v]]), median = median(.data[[v]]),
       mean = mean(.data[[v]]), max = max(.data[[v]])))
     
-    p <- ggplot(df, aes(NOW_COV, .data[[v]], fill = NOW_COV)) +
+    p <- ggplot(df_training, aes(NOW_COV, .data[[v]], fill = NOW_COV)) +
       geom_boxplot(show.legend = FALSE) +
       scale_x_discrete(labels = c("1" = "Covered", "2" = "Not Covered")) + 
       labs(title = paste(v, "by NOW_COV"), x = "NOW_COV")
@@ -175,12 +194,22 @@ for (v in top_vars) {
     
   } else {
     # categorical: proportion table + stacked bar
-    print(round(prop.table(table(df[[v]], df$NOW_COV), margin = 1), 3))
+    print(round(prop.table(table(df_training[[v]], df_training$NOW_COV), margin = 1), 3))
     
-    print(ggplot(df, aes(.data[[v]], fill = NOW_COV)) +
+    print(ggplot(df_training, aes(.data[[v]], fill = NOW_COV)) +
             geom_bar(position = "fill") +
             labs(title = paste("NOW_COV proportion by", v),
                  subtitle = "1 = covered, 2 = not covered", x = v, y = "Proportion"))
     }
 }
 ```
+
+Our group will be using demographic and income features from the U.S. Census Bureau data to predict whether an individual has health insurance coverage. This is a classification problem as we are trying to create a model to predict whether a person either has or does not have health insurance coverage. We have a mix of quantitative and qualitative variables, with notable variables such as income, age, and number of persons in the household under age 18 as clear quantitative variables. We also have data on sex, labor force status, the longest job class held by a worker, educational attainment, and state, all of which are important qualitative features.
+
+Model 1.) We will first fit a simple KNN model with cross validation using just our quantitative features to predict health insurance coverage status. This will be a simple starting point from which we can develop more complex models that incorporate our qualitative features.
+
+Model 2.) We will then fit a standard logistic regression model using both our quantitative and qualitative features to predict whether someone has healthcare coverage, using stepwise and best subset selection to find the best models in both cases. We will also leverage cross validation to iteratively split the data into testing and training sets in order to best train our model and evaluate its performance.
+
+Model 3.) We will then leverage bootstrap sampling along with our best logistic regression model to use sampling with replacement as a strategy to estimate our logistic regression model. This will allow us to determine the accuracy and variability of our estimates by constructing confidence intervals for our model estimates. By repeatedly resampling with replacement from the dataset, we are able to construct a sampling distribution that allows us to determine model accuracy and variability. 
+
+Model 4.) We will finally leverage tree methods to predict whether someone has healthcare coverage. With tree methods we will also be able to use the full breadth of both our qualitative and quantitative features to create a robust model to predict healthcare coverage status.
