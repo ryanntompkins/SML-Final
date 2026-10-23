@@ -1,17 +1,11 @@
 ---
 title: "EDA"
 author: "Ryann Tompkins, Roberta Southwood, Meg Norton, Maddy Stone"
-format: html
+format: pdf
 editor: visual
 ---
 
 ## Loading Data
-
-```{r}
-library(readr)
-Insurance_data <- read_csv("InsuranceData_correctedcolumns.csv")
-View(Insurance_data)
-```
 
 Summary stats and looking at target
 
@@ -20,6 +14,14 @@ Dataset: CPS Annual Social and Economic (March 2026) Supplement for DC
 <https://data.census.gov/app/mdat/CPSASEC2026/table?cv=NOW_COV,A_SEX,LJCW,PRWKSTAT&rv=ucgid,A_HGA,PRDISFLG&vv=A_AGE,HUNDER18,FTOTVAL&wt=MARSUPWT&g=AwFm-BVBlBGWg>
 
 Column codes: <https://www2.census.gov/programs-surveys/cps/techdocs/cpsmar26.pdf>
+
+```{r}
+library(readr)
+Insurance_data <- read_csv("InsuranceData_correctedcolumns.csv")
+View(Insurance_data)
+```
+
+## Cleaning Data 
 
 ```{r}
 library(tidyverse)
@@ -93,6 +95,8 @@ summary(df)
 
 ```
 
+## Splitting Data 
+
 ```{r}
 # split into training and testing 
 set.seed(123)
@@ -110,6 +114,8 @@ nrow(df_training)
 nrow(df_testing)
 
 ```
+
+## EDA 
 
 ```{r}
 
@@ -152,7 +158,7 @@ ggplot(df_training, aes(x = AGE, y = TOTAL_FAM_INCOME, color = NOW_COV)) + geom_
 
 ```
 
-## Looking at which matter most
+## EDA: looking at which matter most
 
 ```{r}
 #install.packages("randomForest")
