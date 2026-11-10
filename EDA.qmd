@@ -21,7 +21,7 @@ Insurance_data <- read_csv("InsuranceData_correctedcolumns.csv")
 View(Insurance_data)
 ```
 
-## Cleaning Data 
+## Cleaning Data
 
 ```{r}
 library(tidyverse)
@@ -95,7 +95,7 @@ summary(df)
 
 ```
 
-## Splitting Data 
+## Splitting Data
 
 ```{r}
 # split into training and testing 
@@ -115,7 +115,7 @@ nrow(df_testing)
 
 ```
 
-## EDA 
+## EDA
 
 ```{r}
 
