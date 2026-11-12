@@ -30,7 +30,6 @@ Column codes: <https://www2.census.gov/programs-surveys/cps/techdocs/cpsmar26.pd
 ```{r}
 library(readr)
 Insurance_data <- read_csv("InsuranceData_correctedcolumns.csv")
-View(Insurance_data)
 ```
 
 ## Cleaning Data
@@ -42,17 +41,6 @@ df <- Insurance_data |>  select(where(~ !all(is.na(.x))))
 
 # dropping state since all are from DC 
 df <- df|> select(-STATE)
-
-# make rows into factors 
-df <- df |> 
-  mutate(
-    NOW_COV  = factor(NOW_COV),
-    A_SEX    = factor(A_SEX),
-    LJCW     = factor(LJCW),
-    PRWKSTAT = factor(PRWKSTAT),
-    A_HGA    = factor(A_HGA),
-    PRDISFLG    = factor(PRDISFLG)
-  )
 
 # rename columns for clarity, some are kept the same 
 df <- df |>
@@ -102,8 +90,50 @@ df <- df |>
     TOTAL_FAM_INCOME = FTOTVAL
   )
 
+# make response 0 (not covered), 1 (covered)
+df$NOW_COV <- ifelse(df$NOW_COV == 1, 1, 0)
 
 summary(df)
+```
+
+```{r}
+
+# combining some factor levels 
+
+df <- df |>
+  
+# education, 1: less than high school, 2: high school, 3: some college, 4: bachelors degree, 5: graduate degree 
+  mutate(
+    EDUCATION = case_when(
+      EDUCATION %in% c(0, 31:38) ~ 1,
+      EDUCATION == 39 ~ 2,
+      EDUCATION %in% 40:42 ~ 3,
+      EDUCATION == 43 ~ 4,
+      EDUCATION %in% 44:46 ~ 5,
+      TRUE ~ NA_integer_),
+    
+# full or part time, 1: not in labor force, 2: usually full time, 3: usually part time, 4: unemployed 
+    FULL_PART_TIME = case_when(
+      FULL_PART_TIME %in% c(0, 1) ~ 1,
+      FULL_PART_TIME %in% c(2, 5) ~ 2,
+      FULL_PART_TIME %in% c(3, 4, 6, 7, 8, 9, 10) ~ 3,
+      FULL_PART_TIME %in% c(11, 12) ~ 4,
+      TRUE ~ NA_integer_)) |>
+
+# disability: if NA then -1  
+      mutate(DISABILITY = na_if(DISABILITY, -1))
+
+# make columns into factors 
+df <- df |> 
+  mutate(
+    NOW_COV  = factor(NOW_COV),
+    SEX    = factor(SEX),
+    LONGEST_JOB_CLASS     = factor(LONGEST_JOB_CLASS),
+    FULL_PART_TIME = factor(FULL_PART_TIME),
+    EDUCATION    = factor(EDUCATION),
+    DISABILITY    = factor(DISABILITY)
+  )
+
 
 ```
 
@@ -125,5 +155,99 @@ df_testing  <- df[-Z, ]
 # view split 
 nrow(df_training)
 nrow(df_testing)
+
+```
+
+## Logistic Regression Model 
+
+#### Log log regression model with step-wise predictor selection
+
+```{r}
+
+# create full loglog regression model (suggestion from Professor Lu)
+full_loglog_model <- glm(NOW_COV ~ . , data = df_training, family = binomial(link = "cloglog"))
+
+#run stepwise  
+# hide the multiple from step glm.fit: fitted probabilities numerically 0 or 1 occurred warning
+suppressWarnings( 
+step_loglog_model <- step(full_loglog_model, direction = "both", trace = 0))
+
+# best model from stepwise 
+best_loglog_model <- glm(NOW_COV ~ LONGEST_JOB_CLASS + EDUCATION + DISABILITY + AGE + TOTAL_FAM_INCOME, data = df_training, family = binomial(link = "cloglog"))
+summary(best_loglog_model)
+```
+
+#### ROC curve and cutoff tuning
+
+The cutoff value chosen to combat the accuracy metric problem is 0.97812.
+
+```{r}
+
+# ROC function from 3_KnnLogistic 
+roc.analysis <-function (object, newdata = NULL, newplot=TRUE)
+{
+  if (is.null(newdata)) {
+    pi.tp <- object$fitted[object$y == 1]
+    pi.tn <- object$fitted[object$y == 0]
+  }
+  else {
+    pi.tp <- predict(object, newdata, type = "response")[newdata$y == 1]
+    pi.tn <- predict(object, newdata, type = "response")[newdata$y == 0]
+  }
+  pi.all <- sort(c(pi.tp, pi.tn))
+  sens <- rep(1, length(pi.all)+1)
+  specc <- rep(1, length(pi.all)+1)
+  for (i in 1:length(pi.all)) {
+    sens[i+1] <- mean(pi.tp >= pi.all[i], na.rm = T)
+    specc[i+1] <- mean(pi.tn >= pi.all[i], na.rm = T)
+  }
+  npoints <- length(sens)
+  area <- sum(0.5 * (sens[-1] + sens[-npoints]) * (specc[-npoints] -
+                                                     specc[-1]))
+  lift <- (sens - specc)[-1]
+  cutoff <- pi.all[lift == max(lift)][1]
+  sensopt <- sens[-1][lift == max(lift)][1]
+  specopt <- 1 - specc[-1][lift == max(lift)][1]
+  par(pty="s")
+  if (newplot){
+    plot(specc, sens, xlim = c(0, 1), ylim = c(0, 1), type = "s",
+         xlab = "FPR = 1-specificity", ylab = "TPR = sensitivity", main="ROC")
+    abline(0, 1)
+  }
+  else lines(specc, sens, type="s", lty=2, col=2)
+  list(pihat=as.vector(pi.all), sens=as.vector(sens[-1]),
+       spec=as.vector(1-specc[-1]), area = area, cutoff = cutoff,
+       sensopt = sensopt, specopt = specopt)
+}
+
+# view plot 
+train.ROC <- roc.analysis(best_loglog_model)
+
+# view results 
+train.ROC[(4:7)]
+
+# get cutoff value 
+cutoff <- train.ROC$cutoff
+
+```
+
+#### Testing Data Analysis 
+
+The testing classification rate is 0.6439169, and the testing error rate is 0.3560831.
+
+```{r}
+
+# get predictions 
+loglog_pred_prob <- predict(best_loglog_model, newdata= df_testing, type="response")
+loglog_predicted_class <- 1*(loglog_pred_prob > cutoff)
+
+# Confusion matrix
+table(df_testing$NOW_COV, loglog_predicted_class)
+
+# Correct classification rate
+mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
+
+# Error rate
+1 - mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
 
 ```
