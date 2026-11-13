@@ -37,10 +37,10 @@ Insurance_data <- read_csv("InsuranceData_correctedcolumns.csv")
 ```{r}
 library(tidyverse)
 
-df <- Insurance_data |>  select(where(~ !all(is.na(.x))))
+df <- Insurance_data |>  dplyr::select(where(~ !all(is.na(.x))))
 
 # dropping state since all are from DC 
-df <- df|> select(-STATE)
+df <- df|> dplyr::select(-STATE)
 
 # rename columns for clarity, some are kept the same 
 df <- df |>
@@ -231,32 +231,38 @@ cutoff <- train.ROC$cutoff
 
 ```
 
-#### Testing Data Analysis
-
-The testing classification rate is 0.6439169, and the testing error rate is 0.3560831.
+#### Training Data Analysis 
 
 ```{r}
+# take na out to make length of fitted values 
+df_training_no_na <- na.omit(df_training)
 
-# get predictions 
-loglog_pred_prob <- predict(best_loglog_model, newdata= df_testing, type="response")
-loglog_predicted_class <- 1*(loglog_pred_prob > cutoff)
+# get predicted values 
+predicted_class_training <- 1*(best_loglog_model$fitted.values > cutoff)
 
-# Confusion matrix
-table(df_testing$NOW_COV, loglog_predicted_class)
+# Confusion matrix training
+conf_matrix <- table(df_training_no_na$NOW_COV, predicted_class_training)
+conf_matrix
 
-# Correct classification rate
-mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
+# Correct classification rate training 
+mean(df_training_no_na$NOW_COV == predicted_class_training)
 
-# Error rate
-1 - mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
+# Error rate training
+1 - mean(df_training_no_na$NOW_COV == predicted_class_training)
 
+# TPR, FNR, TNR and FPR
+prop.table(conf_matrix, 1)
 ```
+
+On the training data the model has a classification rate of 0.594. The specificity (true negative rate) of the model on the training data is 0.955 and the sensitivity (true positive rate) is 0.581.
 
 ## LDA and QDA Models
 
-### LDA 
+#### LDA
 
 ```{r}
+library(MASS)
+
 lda_model <- lda(NOW_COV ~ AGE + HUNDER18 + TOTAL_FAM_INCOME, data = df_training, CV=TRUE)
 summary(lda_model)
 ```
@@ -265,7 +271,7 @@ summary(lda_model)
 mean(lda_model$class != df_training$NOW_COV)
 ```
 
-### QDA
+#### QDA
 
 ```{r}
 qda_model <- qda(NOW_COV ~ AGE + HUNDER18 + TOTAL_FAM_INCOME, data = df_training, CV=TRUE)
@@ -278,3 +284,26 @@ mean(qda_model$class != df_training$NOW_COV)
 
 Both the QDA and LDA models appear to perform the same as the training prediction error rate of 0.033 is the same across both models.
 
+## KNN 
+
+## Tree 
+
+## Testing Data Analysis
+
+#### Regression
+
+```{r}
+
+# get predictions 
+# loglog_pred_prob <- predict(best_loglog_model, newdata= df_testing, type="response")
+# loglog_predicted_class <- 1*(loglog_pred_prob > cutoff)
+
+# Confusion matrix
+# table(df_testing$NOW_COV, loglog_predicted_class)
+
+# Correct classification rate
+# mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
+
+# Error rate
+# 1 - mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
+```
