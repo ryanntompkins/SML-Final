@@ -1,0 +1,134 @@
+---
+title: "Fitted Models"
+format: html
+editor: visual
+---
+
+## Load the Libraries and Data
+
+```{r}
+library(tidyverse)
+library(car)
+library(leaps)
+library(class)
+library(MASS)
+library(boot)
+library(bootstrap)
+```
+```{r}
+library(readr)
+Insurance_data <- read_csv("InsuranceData_correctedcolumns.csv")
+```
+
+
+```{r}
+df <- Insurance_data |>  select(where(~ !all(is.na(.x))))
+
+# dropping state since all are from DC 
+df <- df|> select(-STATE)
+
+# make rows into factors 
+df <- df |> 
+  mutate(
+    NOW_COV  = factor(NOW_COV),
+    A_SEX    = factor(A_SEX),
+    LJCW     = factor(LJCW),
+    PRWKSTAT = factor(PRWKSTAT),
+    A_HGA    = factor(A_HGA),
+    PRDISFLG    = factor(PRDISFLG)
+  )
+
+# rename columns for clarity, some are kept the same 
+df <- df |>
+  rename(
+    # NOW_COV: 1 = covered, 2 = not covered 
+    NOW_COV = NOW_COV, 
+    
+    # sex: 1 = Male, 2 = Female
+    SEX = A_SEX,
+    
+    # class of longest job 
+    # 0 = NIU, 1 = private, 2 = federal, 3 = state, 4 = local, 
+    # 5 = self employed incorporated, yes, 6 = self employed incorporated, no or farm
+    # 7 = without pay
+    LONGEST_JOB_CLASS = LJCW,
+    
+    # full or part time work 
+    # 00 = NIU, 01 = Not in labor force, 02 = FT hours (35+), usually FT
+    # 03 = PT for economic reasons, usually FT, 04 = PT for non-economic reasons, usually FT
+    # 05 = Not at work, usually FT, 06 = PT hrs, usually PT for economic reasons
+    # 07 = PT hrs, usually PT for non-economic, 08 = FT hours, usually PT for economic reasons
+    # 09 = FT hours, usually PT for non-economic reasons, 10 = Not at work, usually part-time
+    # 11 = Unemployed FT, 12 = Unemployed PT
+    FULL_PART_TIME = PRWKSTAT,
+    
+    # highest grade achieved 
+    # 0 = Children, 31 = Less than 1st grade, 32 = 1st,2nd,3rd,or 4th grade
+    # 33 = 5th or 6th grade, 34 = 7th and 8th grade, 35 = 9th grade
+    # 36 = 10th grade, 37 = 11th grade, 38 = 12th grade no diploma
+    # 39 = High school graduate - high school diploma or equivalent
+    # 40 = Some college but no degree, 41 = Associate degree in college occupation program
+    # 42 = Associate degree in college, 43 = Bachelor's degree, 44 = Master's degree, 
+    # 45 = Professional school degree, 46 = Doctorate degree
+    EDUCATION = A_HGA, 
+    
+    # disability 
+    # -1 = NIU, 1 = Yes, 2 = No
+    DISABILITY = PRDISFLG, 
+    
+    # age
+    AGE = A_AGE,
+    
+    # Number of persons in household under age 18
+    HUNDER18 = HUNDER18, 
+    
+    # Total family income 
+    TOTAL_FAM_INCOME = FTOTVAL
+  )
+
+
+summary(df)
+```
+```{r}
+# split into training and testing 
+set.seed(123)
+
+# want to use 80-20 split 
+training_pct <- 0.8
+
+# split the data 
+Z <- sample(nrow(df), floor(training_pct * nrow(df))) 
+df_training <- df[Z, ]
+df_testing  <- df[-Z, ]
+
+# view split 
+nrow(df_training)
+```
+
+```{r}
+summary(df_training)
+```
+## LDA and QDA Models
+
+### LDA 
+
+```{r}
+lda_model <- lda(NOW_COV ~ AGE + HUNDER18 + TOTAL_FAM_INCOME, data = df_training, CV=TRUE)
+summary(lda_model)
+```
+```{r}
+mean(lda_model$class != df_training$NOW_COV)
+```
+
+### QDA
+
+```{r}
+qda_model <- qda(NOW_COV ~ AGE + HUNDER18 + TOTAL_FAM_INCOME, data = df_training, CV=TRUE)
+summary(qda_model)
+```
+
+```{r}
+mean(qda_model$class != df_training$NOW_COV)
+```
+
+Both the QDA and LDA models appear to perform the same as the training prediction error rate of 0.033 is the same across both models.
