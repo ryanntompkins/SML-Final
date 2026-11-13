@@ -158,7 +158,7 @@ nrow(df_testing)
 
 ```
 
-## Logistic Regression Model 
+## Logistic Regression Model
 
 #### Log log regression model with step-wise predictor selection
 
@@ -231,7 +231,7 @@ cutoff <- train.ROC$cutoff
 
 ```
 
-#### Testing Data Analysis 
+#### Testing Data Analysis
 
 The testing classification rate is 0.6439169, and the testing error rate is 0.3560831.
 
@@ -251,3 +251,30 @@ mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
 1 - mean(df_testing$NOW_COV == loglog_predicted_class, na.rm = TRUE)
 
 ```
+
+## LDA and QDA Models
+
+### LDA 
+
+```{r}
+lda_model <- lda(NOW_COV ~ AGE + HUNDER18 + TOTAL_FAM_INCOME, data = df_training, CV=TRUE)
+summary(lda_model)
+```
+
+```{r}
+mean(lda_model$class != df_training$NOW_COV)
+```
+
+### QDA
+
+```{r}
+qda_model <- qda(NOW_COV ~ AGE + HUNDER18 + TOTAL_FAM_INCOME, data = df_training, CV=TRUE)
+summary(qda_model)
+```
+
+```{r}
+mean(qda_model$class != df_training$NOW_COV)
+```
+
+Both the QDA and LDA models appear to perform the same as the training prediction error rate of 0.033 is the same across both models.
+
